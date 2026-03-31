@@ -1,0 +1,87 @@
+# 🗺 Roadmap Generator
+
+A CLI tool that generates personalized, step-by-step roadmaps for career and personal life goals — powered by Claude AI and driven by a custom `SKILL.md`.
+
+---
+
+## Project Structure
+
+```
+roadmap-generator/
+├── roadmap.py          ← main script
+├── SKILL.md            ← instructions that shape Claude's output
+├── requirements.txt    ← Python dependencies
+└── saved_roadmaps/     ← auto-created when you save a roadmap
+```
+
+---
+
+## Setup
+
+### 1. Install dependencies
+```bash
+pip install anthropic
+```
+
+### 2. Set your API key
+```bash
+export ANTHROPIC_API_KEY=your_key_here
+```
+Get your key at: https://console.anthropic.com
+
+### 3. Run it
+```bash
+python roadmap.py
+```
+
+---
+
+## How it works
+
+1. You enter your goal (e.g. "Become a UX designer")
+2. You optionally describe your background
+3. The script reads `SKILL.md` and sends it as the system prompt to Claude
+4. Claude returns a structured JSON roadmap
+5. The roadmap is printed as a clean checklist
+6. Optionally saved to `saved_roadmaps/` as a JSON file
+
+---
+
+## Customizing SKILL.md
+
+`SKILL.md` is the brain of this project. You can edit it to:
+
+- Change the output format (e.g. add deadlines, resources, links)
+- Add new goal categories (e.g. fitness, finance, relationships)
+- Adjust the tone (more strict, more gentle, more detailed)
+- Add your own rules (e.g. "always include a book recommendation per phase")
+
+The more specific your SKILL.md, the better the roadmaps.
+
+---
+
+## Example output
+
+```
+════════════════════════════════════════════════════════════
+  🎯  ROADMAP: Become a frontend developer
+  ⏱   Total duration: 6 months
+════════════════════════════════════════════════════════════
+
+  PHASE 1: FOUNDATION  [3 weeks]
+  Goal: Understand how the web works and write your first webpage
+  ────────────────────────────────────────────────────────
+    ☐ Step 1: Learn HTML basics
+         Complete the free HTML course on freeCodeCamp (chapters 1–5).
+    ☐ Step 2: Learn CSS fundamentals
+         Style your HTML page using colors, fonts, and layout basics.
+    ...
+```
+
+---
+
+## Requirements
+
+- Python 3.8+
+- `anthropic` package
+- Anthropic API key
