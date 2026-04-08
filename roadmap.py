@@ -418,9 +418,92 @@ def export_pdf(roadmap: dict) -> Path:
     doc.build(story)
     return path
 
+# ── AI Progress Coach ─────────────────────────────────────────────────────────
+
+def ai_coach_checkin(roadmap: dict, api_key: str):
+    """
+    Send the user's current progress to Claude and get a personalized
+    coach message: achievements, next focus, and an honest flag if behind.
+    """
+    client = anthropic.Anthropic(api_key=api_key)
+
+    done, total = overall_progress(roadmap)
+    percent = int((done / total) * 100) if total > 0 else 0
+
+    # Build a compact progress summary for Claude
+    completed_steps = []
+    pending_steps   = []
+
+    for phase in roadmap["phases"]:
+        for step in phase["steps"]:
+            entry = f"[Phase {phase['phase']}: {phase['title']}] {step['title']}"
+            if step.get("done"):
+                completed_steps.append(entry)
+            else:
+                pending_steps.append(entry)
+
+    progress_summary = (
+        f"Goal: {roadmap['goal']}\n"
+        f"Total duration: {roadmap['duration']}\n"
+        f"Progress: {done}/{total} steps done ({percent}%)\n\n"
+        f"Completed steps:\n" +
+        ("\n".join(f"  ✓ {s}" for s in completed_steps) if completed_steps else "  None yet") +
+        f"\n\nRemaining steps:\n" +
+        ("\n".join(f"  ○ {s}" for s in pending_steps[:8]) if pending_steps else "  All done!")
+    )
+
+    print(f"\n  {CYAN}Your coach is reviewing your progress...{RESET}\n")
+
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=500,
+        system=(
+            "You are a warm but honest progress coach. "
+            "The user will share their roadmap progress with you. "
+            "Your job is to give a short, personal check-in message with exactly 3 parts:\n"
+            "1. WINS — acknowledge what they've completed so far (be specific, not generic)\n"
+            "2. FOCUS — tell them the single most important next step to work on and why\n"
+            "3. HONEST FLAG — if they've done less than 25% and the goal seems ambitious, "
+            "gently flag the risk of falling behind. If progress looks good, encourage them. "
+            "If nothing is done yet, motivate them to start.\n\n"
+            "Keep the whole message under 150 words. "
+            "Be direct, warm, and specific — no fluff or filler phrases. "
+            "Use plain text only, no markdown formatting."
+        ),
+        messages=[
+            {"role": "user", "content": progress_summary}
+        ],
+    )
+
+    coach_message = response.content[0].text.strip()
+
+    # Display with a nice framed box
+    width = 58
+    print(f"  {PURPLE}{BOLD}┌{'─' * width}┐{RESET}")
+    print(f"  {PURPLE}{BOLD}│{'  AI Coach Check-in'.center(width)}│{RESET}")
+    print(f"  {PURPLE}{BOLD}└{'─' * width}┘{RESET}\n")
+
+    # Word-wrap the message at ~56 chars per line
+    words   = coach_message.split()
+    line    = ""
+    for word in words:
+        if len(line) + len(word) + 1 > 56:
+            print(f"  {line}")
+            line = word
+        else:
+            line = f"{line} {word}".strip()
+    if line:
+        print(f"  {line}")
+
+    print()
+    # Show progress bar summary
+    bar = progress_bar(done, total, width=20)
+    print(f"  Progress: {bar}  {BOLD}{percent}%{RESET}  ({done}/{total} steps)\n")
+
+
 # ── Main Menu ──────────────────────────────────────────────────────────────────
 
-def show_roadmap_menu(roadmap: dict, save_path: Path):
+def show_roadmap_menu(roadmap: dict, save_path: Path, api_key: str):
     """Interactive menu for a loaded roadmap."""
     while True:
         clear()
@@ -437,6 +520,7 @@ def show_roadmap_menu(roadmap: dict, save_path: Path):
         print(f"  {CYAN}5.{RESET} Mark a Step as Done / Not Done")
         print(f"  {CYAN}6.{RESET} Export to PDF")
         print(f"  {CYAN}7.{RESET} Save Progress")
+        print(f"  {PURPLE}8.{RESET} {BOLD}Ask AI Coach for a Check-in{RESET}")
         print(f"  {CYAN}0.{RESET} Back to Main Menu")
         print()
 
@@ -475,6 +559,15 @@ def show_roadmap_menu(roadmap: dict, save_path: Path):
             save_path.write_text(
                 json.dumps(roadmap, indent=2, ensure_ascii=False), encoding="utf-8")
             print(f"  {GREEN}Progress saved.{RESET}")
+
+            # Offer a quick coach nudge after marking progress
+            done, total = overall_progress(roadmap)
+            if done > 0:
+                print(f"\n  {DIM}Want a quick coach message based on your progress?{RESET}")
+                nudge = input(f"  {CYAN}Get coach check-in? (y/n):{RESET} ").strip().lower()
+                if nudge == "y":
+                    ai_coach_checkin(roadmap, api_key)
+
             input(f"  {DIM}Press Enter to continue...{RESET}")
 
         elif choice == "6":
@@ -487,6 +580,12 @@ def show_roadmap_menu(roadmap: dict, save_path: Path):
             save_path.write_text(
                 json.dumps(roadmap, indent=2, ensure_ascii=False), encoding="utf-8")
             print(f"\n  {GREEN}Roadmap saved to: {save_path}{RESET}\n")
+            input(f"  {DIM}Press Enter to continue...{RESET}")
+
+        elif choice == "8":
+            clear()
+            header("AI Coach Check-in")
+            ai_coach_checkin(roadmap, api_key)
             input(f"  {DIM}Press Enter to continue...{RESET}")
 
         elif choice == "0":
@@ -547,7 +646,7 @@ def main():
                 save_path.write_text(
                     json.dumps(roadmap, indent=2, ensure_ascii=False), encoding="utf-8")
                 print(f"  {GREEN}Roadmap generated and saved!{RESET}")
-                show_roadmap_menu(roadmap, save_path)
+                show_roadmap_menu(roadmap, save_path, api_key)
 
             except json.JSONDecodeError as e:
                 print(f"\n  {RED}Failed to parse roadmap JSON: {e}{RESET}\n")
@@ -568,7 +667,7 @@ def main():
                     if data["goal"] == roadmap["goal"]:
                         save_path = f
                         break
-                show_roadmap_menu(roadmap, save_path)
+                show_roadmap_menu(roadmap, save_path, api_key)
 
         elif choice == "0":
             print(f"\n  {DIM}Goodbye!{RESET}\n")
